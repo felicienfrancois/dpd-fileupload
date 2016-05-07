@@ -18,68 +18,39 @@ function Fileupload(name, options) {
 	Collection.apply(this, arguments);
 	
 	// check to see if config has everything we need...
-	if (!this.config.properties || !this.config.directory || !this.config.fullDirectory) {
+	// We will no longer need a config.properties
+	// This 'should' be first run only, and shouldn't need to be saved...
+	if (!this.config.directory || !this.config.fullDirectory) {
 		var dir = "_" + name;
-		this.config.properties = {
-			filesize: {
-				name: "filesize",
-				type: "number",
-				typeLabel: "number",
-				required: true,
-				id: "filesize",
-				order: 0
-			},
-			filename: {
-				name: "filename",
-				type: "string",
-				typeLabel: "string",
-				required: true,
-				id: "filename",
-				order: 0
-			},
-			originalFilename: {
-				name: "originalFilename",
-				type: "string",
-				typeLabel: "string",
-				required: true,
-				id: "originalFilename",
-				order: 0
-			},
-			subdir: {
-				name: "subdir",
-				type: "string",
-				typeLabel: "string",
-				required: false,
-				id: "subdir",
-				order: 0
-			},
-			creationDate: {
-				name: "creationDate",
-				type: "number",
-				typeLabel: "number",
-				required: true,
-				id: "creationDate",
-				order: 0
-			},
-			type: {
-				name: "type",
-				type: "string",
-				typeLabel: "string",
-				required: true,
-				id: "type",
-				order: 0
-			}
-		};
-		this.properties = this.config.properties;
 		
 		this.config.directory = dir;
-		this.config.fullDirectory = path.join(__dirname, publicDir, dir);
+		// Config path is likely to be the best location to start from...
+		this.config.fullDirectory = path.join(options.configPath || __dirname, publicDir, dir);
+		
+		this.config.authWrite = true;
+		this.config.authRead = true;
+		this.config.authDelete = true;
 		
 		// write the config file since it was apparently incomplete before
 		fs.writeFile(path.join(options.configPath, 'config.json'), JSON.stringify(this.config), function(err) {
 			if (err) throw err;
 		});
 	}
+	
+	// We need to make sure properties is at least an object
+	if (!this.properties) {
+		this.properties = {};
+	}
+	
+	// Properties are now hard coded, we will not longer need a properties pages
+	this.properties.type = this.properties.type || {type: 'string', required: true};
+	this.properties.creationDate = this.properties.creationDate || {type: 'number', required: true};
+	this.properties.subdir = this.properties.subdir || {type: 'string', required: false};
+	this.properties.originalFilename = this.properties.originalFilename || {type: 'string', required: true};
+	this.properties.filename = this.properties.filename || {type: 'string', required: true};
+	this.properties.filesize = this.properties.filesize || {type: 'number'};
+	// Track who uploaded the file, optional and only useful if authWrite is set to true
+	this.properties.uploaderId = this.properties.uploader || {type: 'string', required: this.config.authWrite}
 	
 	// If the directory doesn't exist, we'll create it
 	try {
@@ -91,8 +62,52 @@ function Fileupload(name, options) {
 
 util.inherits(Fileupload, Collection);
 
-Fileupload.events = ["Get", "Post", "Delete"];
-Fileupload.dashboard = Collection.dashboard;
+Fileupload.events = ["Get", "Post", "Delete", "Upload"];
+
+// We will be using mostly a default dashboard, but we need to hack the rest to be default
+Fileupload.dashboard = {
+    path: path.join(__dirname, 'dashboard')
+    , pages: ['Data', 'Events', 'API', 'Config', "Help"]
+    , scripts: [
+        '/../collection/js/lib/jquery-ui-1.8.22.custom.min.js'
+        , '/../collection/js/lib/knockout-2.1.0.js'
+        , '/../collection/js/lib/knockout.mapping.js'
+        , '/../collection/js/util/knockout-util.js'
+        , '/../collection/js/util/key-constants.js'
+        , '/../collection/js/util.js'
+    ]
+};
+
+// Make the config editable
+Fileupload.basicDashboard = {
+	settings: [
+		{
+			name: 'directory',
+			type: 'text',
+			description: 'The public directory that files are saved too. This file will be placed in the public directory. (default: _{ModuleName})'
+		},
+		{
+			name: 'authRead',
+			type: 'checkbox',
+			description: 'Is the user required to be logged in to read Files (Not Implemented)'
+		},
+		{
+			name: 'authWrite',
+			type: 'checkbox',
+			description: 'Is the user required to be logged in to write Files'
+		},
+		{
+			name: 'authDelete',
+			type: 'checkbox',
+			description: 'Is the user required to be logged in to delete Files (Not Implemented)'
+		},
+		{
+			name: 'authUpdate',
+			type: 'checkbox',
+			description: 'Is the user required to be logged in to update Files (Not Implemented)'
+		}
+	]
+}
 
 /**
  * Module methods
@@ -104,6 +119,15 @@ Fileupload.prototype.handle = function (ctx, next) {
 
 	if (req.method === "POST") { // not clear what to do with PUTs yet...
 		ctx.body = {};
+		
+		// Implement authWrite
+		if(this.config.authWrite) {
+			if (!(ctx.session && ctx.session.data && ctx.session.data.uid)) {
+				return ctx.done("Must me authenticated to Post a new File");
+			} else {
+				ctx.body.uploaderId = ctx.session.data.uid;
+			}
+		}
 		
 		var form = new formidable.IncomingForm(),
 			uploadDir = this.config.fullDirectory,
@@ -168,7 +192,23 @@ Fileupload.prototype.handle = function (ctx, next) {
 				file.originalFilename = file.name;
 				file.name = md5(Date.now()) + '.' + file.name.split('.').pop();
 				
-				renameAndStore(file);
+				var uploadDomain = {
+					file: file,
+					setFilename: function (filename) {uploadDomain.file.name = filename;}
+				};
+				
+				self.addDomainAdditions(uploadDomain);
+				if (self.events.Upload) {
+					self.events.Upload.run(ctx, uploadDomain, function(err) {
+						if (err) {
+							return ctx.done(err);
+						} else {
+							renameAndStore(uploadDomain.file);
+						}
+					})
+				} else {
+					renameAndStore(uploadDomain.file);
+				}
 			}).on('fileBegin', function(name, file) {
 				remainingFile++;
 				debug("Receiving a file: %j", file.name);
