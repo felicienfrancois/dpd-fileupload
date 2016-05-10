@@ -57,7 +57,7 @@ function Fileupload(name, options) {
 	this.properties.uploaderId = this.properties.uploaderId || {type: 'string', required: this.config.authWrite}
 	
 	// mkdirp already does nothing if the directory already exists
-	mkdirp(this.config.fullDirectory, (err) => {
+	mkdirp(this.config.fullDirectory, function(err) {
 		if (err) {
 			console.log("Initial Creation Error: ", err);
 		}
@@ -174,7 +174,7 @@ Fileupload.prototype.handle = function (ctx, next) {
 					debug("Subdir found: %j", req.query[propertyName]);
 					uploadDir = path.join(uploadDir, req.query.subdir);
 					// If the sub-directory doesn't exists, we'll create it
-					mkdirp(uploadDir, err => {
+					mkdirp(uploadDir, function(err) {
 						if (err) {
 							return ctx.done("Error creating subdirectory " + uploadDir);
 						}
