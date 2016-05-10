@@ -182,8 +182,10 @@ Fileupload.prototype.handle = function (ctx, next) {
 					uploadDir = path.join(uploadDir, req.query.subdir);
 					// If the sub-directory doesn't exists, we'll create it
 					mkdirp(uploadDir, err => {
+						if (err) {
 						console.log("Creation Error: ", err);
-						return ctx.done("Error creating subdirectory " + uploadDir);
+							return ctx.done("Error creating subdirectory " + uploadDir);
+						}
 					});
 					// try {
 					// 	fs.statSync(uploadDir).isDirectory();
