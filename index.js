@@ -64,7 +64,7 @@ function Fileupload(name, options) {
 		// mkdirp already does nothing if the directory already exists
 		mkdirp(this.config.fullDirectory, (err) => {
 			if (err) {
-				console.log(err);
+				console.log("Initial Creation Error: ", err);
 			}
 		})
 	//}
@@ -182,7 +182,7 @@ Fileupload.prototype.handle = function (ctx, next) {
 					uploadDir = path.join(uploadDir, req.query.subdir);
 					// If the sub-directory doesn't exists, we'll create it
 					mkdirp(uploadDir, err => {
-						console.log(err);
+						console.log("Creation Error: ", err);
 						return ctx.done("Error creating subdirectory " + uploadDir);
 					});
 					// try {
