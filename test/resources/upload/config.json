@@ -1,4 +1,1 @@
-{
-	"type": "Fileupload",
-	"directory": "upload_"
-}
+{"type":"Fileupload" }

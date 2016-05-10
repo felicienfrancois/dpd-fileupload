@@ -29,7 +29,7 @@ describe('Integration tests for dpd-fileupload', function() {
         expect(body).to.be.empty;
         done();
       });
-    }, 500);
+    }, 1000);
   });
 
 

@@ -4,6 +4,7 @@
  * Module dependencies
  */
 var	fs = require('fs'),
+	mkdirp      = require('./util').mkdirp,
 	util		= require('util'),
 	path		= require('path'),
 	publicDir	= "/../../public",
@@ -27,9 +28,12 @@ function Fileupload(name, options) {
 		// Config path is likely to be the best location to start from...
 		this.config.fullDirectory = path.join(options.configPath || __dirname, publicDir, dir);
 		
-		this.config.authWrite = true;
-		this.config.authRead = true;
-		this.config.authDelete = true;
+		this.config.authWrite = false;
+		this.config.authRead = false;
+		this.config.authDelete = false;
+		this.config.authDeleteOwn = false;
+		this.config.authUpdate = false;
+		this.config.authUpdateOwn = false;
 		
 		// write the config file since it was apparently incomplete before
 		fs.writeFile(path.join(options.configPath, 'config.json'), JSON.stringify(this.config), function(err) {
@@ -50,24 +54,25 @@ function Fileupload(name, options) {
 	this.properties.filename = this.properties.filename || {type: 'string', required: true};
 	this.properties.filesize = this.properties.filesize || {type: 'number'};
 	// Track who uploaded the file, optional and only useful if authWrite is set to true
-	this.properties.uploaderId = this.properties.uploader || {type: 'string', required: this.config.authWrite}
+	this.properties.uploaderId = this.properties.uploaderId || {type: 'string', required: this.config.authWrite}
 	
-	// If the directory doesn't exist, we'll create it
-	try {
-		fs.statSync(this.config.fullDirectory).isDirectory();
-	} catch (er) {
-		fs.mkdir(this.config.fullDirectory);
-	}
+	// mkdirp already does nothing if the directory already exists
+	mkdirp(this.config.fullDirectory, function(err) {
+		if (err) {
+			console.log("Initial Creation Error: ", err);
+		}
+	})
 }
 
 util.inherits(Fileupload, Collection);
 
 Fileupload.events = ["Get", "Post", "Delete", "Upload"];
+Fileupload.clientGenerationGet = ['fileCount', 'totalFilesize']
 
 // We will be using mostly a default dashboard, but we need to hack the rest to be default
 Fileupload.dashboard = {
     path: path.join(__dirname, 'dashboard')
-    , pages: ['Data', 'Events', 'API', 'Config', "Help"]
+    , pages: ['Properties', 'Data', 'Events', 'API', 'Config', "Help"]
     , scripts: [
         '/../collection/js/lib/jquery-ui-1.8.22.custom.min.js'
         , '/../collection/js/lib/knockout-2.1.0.js'
@@ -92,6 +97,11 @@ Fileupload.basicDashboard = {
 			description: 'Is the user required to be logged in to read Files (Not Implemented)'
 		},
 		{
+			name: 'authReadOwn',
+			type: 'checkbox',
+			description: 'Is the user required to be logged in to read Files and only thier files. (Not Implemented)'
+		},
+		{
 			name: 'authWrite',
 			type: 'checkbox',
 			description: 'Is the user required to be logged in to write Files'
@@ -99,10 +109,20 @@ Fileupload.basicDashboard = {
 		{
 			name: 'authDelete',
 			type: 'checkbox',
-			description: 'Is the user required to be logged in to delete Files (Not Implemented)'
+			description: 'Is the user required to be logged in to delete Files'
+		},
+		{
+			name: 'authDeleteOwn',
+			type: 'checkbox',
+			description: 'Is the user required to be logged in to delete Files, and Only their own files.'
 		},
 		{
 			name: 'authUpdate',
+			type: 'checkbox',
+			description: 'Is the user required to be logged in to update Files (Not Implemented)'
+		},
+		{
+			name: 'authUpdateOwn',
 			type: 'checkbox',
 			description: 'Is the user required to be logged in to update Files (Not Implemented)'
 		}
@@ -119,7 +139,6 @@ Fileupload.prototype.handle = function (ctx, next) {
 
 	if (req.method === "POST") { // not clear what to do with PUTs yet...
 		ctx.body = {};
-		
 		// Implement authWrite
 		if(this.config.authWrite) {
 			if (!(ctx.session && ctx.session.data && ctx.session.data.uid)) {
@@ -155,11 +174,11 @@ Fileupload.prototype.handle = function (ctx, next) {
 					debug("Subdir found: %j", req.query[propertyName]);
 					uploadDir = path.join(uploadDir, req.query.subdir);
 					// If the sub-directory doesn't exists, we'll create it
-					try {
-						fs.statSync(uploadDir).isDirectory();
-					} catch (er) {
-						fs.mkdir(uploadDir);
-					}
+					mkdirp(uploadDir, function(err) {
+						if (err) {
+							return ctx.done("Error creating subdirectory " + uploadDir);
+						}
+					});
 				}
 				
 				ctx.body[propertyName] = req.query[propertyName];
@@ -191,23 +210,20 @@ Fileupload.prototype.handle = function (ctx, next) {
 				debug("File %j received", file.name);
 				file.originalFilename = file.name;
 				file.name = md5(Date.now()) + '.' + file.name.split('.').pop();
+				var errors = {};
 				
-				var uploadDomain = {
-					file: file,
-					setFilename: function (filename) {uploadDomain.file.name = filename;}
-				};
-				
-				self.addDomainAdditions(uploadDomain);
+				var uploadDomain = self.createDomain(file, errors);
+
 				if (self.events.Upload) {
 					self.events.Upload.run(ctx, uploadDomain, function(err) {
 						if (err) {
 							return ctx.done(err);
 						} else {
-							renameAndStore(uploadDomain.file);
+							renameAndStore(uploadDomain.data);
 						}
 					})
 				} else {
-					renameAndStore(uploadDomain.file);
+					renameAndStore(uploadDomain.data);
 				}
 			}).on('fileBegin', function(name, file) {
 				remainingFile++;
@@ -234,6 +250,21 @@ Fileupload.prototype.del = function(ctx, next) {
 	
 	this.find(ctx, function(err, result) {
 		if (err) return ctx.done(err);
+		
+		// Implement authDelete
+		if(self.config.authDeleteOwn) {
+			if (!(ctx.session && ctx.session.data && ctx.session.data.uid)) {
+				return ctx.done("Please log into to Delete your files.");
+			} else if (result.uploaderId && !(ctx.session.data.uid === result.uploaderId)) {
+				return ctx.done("You can only delete your own files.");
+			} else {
+				return ctx.done("This file is not owned, ask admin to delete.");
+			}
+		} else if(self.config.authDelete) {
+			if (!(ctx.session && ctx.session.data && ctx.session.data.uid)) {
+				return ctx.done("Must me authenticated to Delete a File");
+			}
+		}
 		
 		// let the collection handle the store... we just care about the files themselves
 		self.remove(ctx, function(err) {
