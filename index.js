@@ -166,7 +166,7 @@ Fileupload.prototype.handle = function (ctx, next) {
 			
 			remainingFile--;
 			if (remainingFile === 0) {
-				//console.log("Response sent: ", resultFiles);
+				console.log("Response sent: ", resultFiles);
 				debug("Response sent: ", resultFiles);
 				return ctx.done(null, resultFiles); // TODO not clear what to do here yet
 			}
