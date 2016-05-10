@@ -17,7 +17,7 @@ function mkdirp(filePath, mode, cb) {
         return;
     }
     var ps = path.normalize(filePath).split('/');
-    fileExists(filePath, exists => {
+    fileExists(filePath, function(exists) {
         if (exists) {
             fn(null);
         } else mkdirp(ps.slice(0,-1).join('/'), mode, function (err) {
