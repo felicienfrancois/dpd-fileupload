@@ -56,18 +56,12 @@ function Fileupload(name, options) {
 	// Track who uploaded the file, optional and only useful if authWrite is set to true
 	this.properties.uploaderId = this.properties.uploaderId || {type: 'string', required: this.config.authWrite}
 	
-	// If the directory doesn't exist, we'll create it
-	// try {
-	// 	fs.statSync(this.config.fullDirectory).isDirectory();
-	// } catch (er) {
-		//fs.mkdir(this.config.fullDirectory);
-		// mkdirp already does nothing if the directory already exists
-		mkdirp(this.config.fullDirectory, (err) => {
-			if (err) {
-				console.log("Initial Creation Error: ", err);
-			}
-		})
-	//}
+	// mkdirp already does nothing if the directory already exists
+	mkdirp(this.config.fullDirectory, (err) => {
+		if (err) {
+			console.log("Initial Creation Error: ", err);
+		}
+	})
 }
 
 util.inherits(Fileupload, Collection);
@@ -166,7 +160,6 @@ Fileupload.prototype.handle = function (ctx, next) {
 			
 			remainingFile--;
 			if (remainingFile === 0) {
-				console.log("Response sent: ", resultFiles);
 				debug("Response sent: ", resultFiles);
 				return ctx.done(null, resultFiles); // TODO not clear what to do here yet
 			}
@@ -183,15 +176,9 @@ Fileupload.prototype.handle = function (ctx, next) {
 					// If the sub-directory doesn't exists, we'll create it
 					mkdirp(uploadDir, err => {
 						if (err) {
-						console.log("Creation Error: ", err);
 							return ctx.done("Error creating subdirectory " + uploadDir);
 						}
 					});
-					// try {
-					// 	fs.statSync(uploadDir).isDirectory();
-					// } catch (er) {
-					// 	fs.mkdir(uploadDir);
-					// }
 				}
 				
 				ctx.body[propertyName] = req.query[propertyName];
@@ -226,15 +213,7 @@ Fileupload.prototype.handle = function (ctx, next) {
 				var errors = {};
 				
 				var uploadDomain = self.createDomain(file, errors);
-				//uploadDomain = {
-					//file: file,
-					//uploadDomainsetFilename: function (filename) {uploadDomain.file.name = filename;}
-				//};
-				
-				//uploadDomain['this'] = file;
-				//uploadDomain.data = file;
-				
-				//self.addDomainAdditions(uploadDomain);
+
 				if (self.events.Upload) {
 					self.events.Upload.run(ctx, uploadDomain, function(err) {
 						if (err) {
