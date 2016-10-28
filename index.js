@@ -237,7 +237,7 @@ Fileupload.prototype.handle = function (ctx, next) {
 	} else if (req.method === "DELETE") {
 		this.del(ctx, ctx.done);
 	} else if (req.method === "PUT") {
-		ctx.done({ statusCode: 400, message: "PUT not yet supported" });
+		this.save(ctx, ctx.done);
 	} else {
 		Collection.prototype.handle.apply(this, [ctx, next]);
 	}
