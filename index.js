@@ -66,7 +66,7 @@ function Fileupload(name, options) {
 
 util.inherits(Fileupload, Collection);
 
-Fileupload.events = ["Get", "Post", "Delete", "Upload"];
+Fileupload.events = ["Get", "Post", "Put", "Delete", "Upload"];
 Fileupload.clientGenerationGet = ['fileCount', 'totalFilesize']
 
 // We will be using mostly a default dashboard, but we need to hack the rest to be default
