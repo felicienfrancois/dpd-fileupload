@@ -289,17 +289,21 @@ Fileupload.prototype.del = function(ctx, next) {
 				}
 			};
 			
-			result.forEach(function(toDelete) {
-				var filepath;
-				if (toDelete.subdir)
-					filepath = path.join(uploadDir, toDelete.subdir, toDelete.filename);
-				else
-					filepath = path.join(uploadDir, toDelete.filename);
-				
-				// actually delete the file, let the Collection methods handle events and whatever else
-				debug('deleting file',filepath);
-				fs.unlink(filepath, finishedFcn);
-			});
+			if (!result.length) {
+				next({statusCode: 200, message: "No file found"});
+			} else {
+				result.forEach(function(toDelete) {
+					var filepath;
+					if (toDelete.subdir)
+						filepath = path.join(uploadDir, toDelete.subdir, toDelete.filename);
+					else
+						filepath = path.join(uploadDir, toDelete.filename);
+
+					// actually delete the file, let the Collection methods handle events and whatever else
+					debug('deleting file',filepath);
+					fs.unlink(filepath, finishedFcn);
+				});
+			}
 		});
 	});
 };
